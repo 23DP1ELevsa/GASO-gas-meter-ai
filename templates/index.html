@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="lv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bezmaksas gāzes skaitītāja nolasītājs</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="page">
+    <section class="hero card">
+      <h1>Bezmaksas gāzes skaitītāja nolasītājs</h1>
+      <p>Augšupielādē foto, un programma lokāli mēģinās noteikt rādījumu līdz komatam, izgatavošanas gadu no Mxx marķējuma un skaitītāja numuru.</p>
+      <p class="muted">Strādā bez OpenAI API. Balstīts uz OpenCV, Tesseract OCR un paraugu salīdzināšanu.</p>
+    </section>
+
+    <section class="grid">
+      <section class="card">
+        <h2>Augšupielāde</h2>
+        <form method="post" enctype="multipart/form-data" class="upload-form">
+          <label class="dropzone">
+            <span>Izvēlies vai ievelc attēlu</span>
+            <input type="file" name="meter_image" accept="image/png,image/jpeg,image/webp" required>
+          </label>
+          <button type="submit">Nolasīt skaitītāju</button>
+        </form>
+
+        {% if error %}
+          <div class="alert error">{{ error }}</div>
+        {% endif %}
+
+        <div class="tips">
+          <h3>Lai precizitāte būtu labāka</h3>
+          <ul>
+            <li>fotografē taisni no priekšas,</li>
+            <li>lai cipari ir ass fokusā,</li>
+            <li>negriez ārā pašu skaitītāju pārāk cieši,</li>
+            <li>centies, lai sarkanā decimāldaļa ir labi redzama.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Rezultāts</h2>
+        {% if image_preview %}
+          <img src="{{ image_preview }}" alt="Augšupielādētais foto" class="preview">
+        {% endif %}
+
+        {% if result %}
+          <div class="result-grid">
+            <div class="result-item">
+              <span class="label">Rādījums līdz komatam</span>
+              <strong>{{ result.meter_reading or 'Nav atrasts' }}</strong>
+            </div>
+            <div class="result-item">
+              <span class="label">Izgatavošanas gads</span>
+              <strong>{{ result.manufacturing_year or 'Nav atrasts' }}</strong>
+            </div>
+            <div class="result-item">
+              <span class="label">Skaitītāja numurs</span>
+              <strong>{{ result.serial_number or 'Nav atrasts' }}</strong>
+            </div>
+            <div class="result-item">
+              <span class="label">Uzticamība</span>
+              <strong>{{ result.confidence }}%</strong>
+            </div>
+          </div>
+
+          {% if result.notes %}
+            <div class="notes">
+              <h3>Piezīmes</h3>
+              <ul>
+                {% for note in result.notes %}
+                  <li>{{ note }}</li>
+                {% endfor %}
+              </ul>
+            </div>
+          {% endif %}
+        {% else %}
+          <p class="muted">Pēc attēla augšupielādes te parādīsies nolasītie dati.</p>
+        {% endif %}
+      </section>
+    </section>
+  </main>
+</body>
+</html>
