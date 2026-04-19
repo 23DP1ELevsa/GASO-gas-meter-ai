@@ -77,6 +77,14 @@ pip install -r requirements.txt
 Šī lietotne izmanto sistēmā instalētu Tesseract OCR.
 
 ### Ieteicamais variants
+Vienkāršākais variants uz Windows ir instalēt to ar `winget`:
+
+```powershell
+winget install UB-Mannheim.TesseractOCR
+```
+
+Pēc instalācijas atver jaunu termināli un pārbaudi, vai komanda ir pieejama.
+
 Uzinstalē Tesseract Windows sistēmā tā, lai `tesseract.exe` būtu vienā no standarta ceļiem:
 - `C:\Program Files\Tesseract-OCR\tesseract.exe`
 - `C:\Program Files (x86)\Tesseract-OCR\tesseract.exe`
