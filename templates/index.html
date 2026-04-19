@@ -10,7 +10,7 @@
   <main class="page">
     <section class="hero card">
       <h1>Bezmaksas gāzes skaitītāja nolasītājs</h1>
-      <p>Augšupielādē foto, un programma lokāli mēģinās noteikt rādījumu līdz komatam, izgatavošanas gadu no Mxx marķējuma un skaitītāja numuru.</p>
+      <p>Augšupielādē foto, un programma lokāli mēģinās noteikt rādījumu līdz komatam.</p>
       <p class="muted">Strādā bez OpenAI API. Balstīts uz OpenCV, Tesseract OCR un paraugu salīdzināšanu.</p>
     </section>
 
@@ -52,30 +52,7 @@
               <span class="label">Rādījums līdz komatam</span>
               <strong>{{ result.meter_reading or 'Nav atrasts' }}</strong>
             </div>
-            <div class="result-item">
-              <span class="label">Izgatavošanas gads</span>
-              <strong>{{ result.manufacturing_year or 'Nav atrasts' }}</strong>
-            </div>
-            <div class="result-item">
-              <span class="label">Skaitītāja numurs</span>
-              <strong>{{ result.serial_number or 'Nav atrasts' }}</strong>
-            </div>
-            <div class="result-item">
-              <span class="label">Uzticamība</span>
-              <strong>{{ result.confidence }}%</strong>
-            </div>
           </div>
-
-          {% if result.notes %}
-            <div class="notes">
-              <h3>Piezīmes</h3>
-              <ul>
-                {% for note in result.notes %}
-                  <li>{{ note }}</li>
-                {% endfor %}
-              </ul>
-            </div>
-          {% endif %}
         {% else %}
           <p class="muted">Pēc attēla augšupielādes te parādīsies nolasītie dati.</p>
         {% endif %}

@@ -1,13 +1,10 @@
-# Bezmaksas gāzes skaitītāja nolasītājs v3
+# Bezmaksas gāzes skaitītāja nolasītājs
 
-Šī ir lokāla Flask lietotne, kas no foto mēģina nolasīt:
-- gāzes skaitītāja rādījumu **tikai līdz komatam**,
-- izgatavošanas gadu no marķējuma **Mxx**,
-- skaitītāja numuru.
+Šī ir lokāla Flask lietotne, kas no foto mēģina nolasīt gāzes skaitītāja rādījumu **tikai līdz komatam**.
 
 ## Kas ir uzlabots
 - vispirms tiek mēģināts atrast **priekšējais panelis**,
-- pēc tam atsevišķi tiek lasīts **rādījums**, **Mxx** un **numurs**,
+- pēc tam tiek lasīts **rādījums līdz komatam**,
 - ir pievienoti auto-pagriešanas mēģinājumi, tāpēc versija strādā stabilāk uz slīpiem foto,
 - ja paneļa izgriezums neder, rādījumam ir rezerves lasīšana no oriģinālā foto.
 
@@ -22,7 +19,6 @@ sudo apt install tesseract-ocr
 
 ### Windows
 Uzinstalē Tesseract. Lietotne mēģina to atrast arī tipiskajos ceļos, piemēram, `C:\Program Files\Tesseract-OCR\tesseract.exe`, pat ja PATH nav sakārtots.
-Ja Tesseract nav pieejams, lietotne joprojām mēģinās nolasīt rādījumu ar lokālo attēlu salīdzināšanu, bet M gada un numura lauki var būt tukši.
 
 ## Palaišana
 ```bash

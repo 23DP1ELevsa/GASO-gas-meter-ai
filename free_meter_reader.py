@@ -41,10 +41,6 @@ RAW_READING_CONFIDENCE_THRESHOLD = 0.9
 @dataclass
 class MeterExtractionResult:
     meter_reading: str | None
-    manufacturing_year: int | None
-    serial_number: str | None
-    confidence: float
-    notes: list[str]
 
 
 class FreeMeterReader:
@@ -56,55 +52,20 @@ class FreeMeterReader:
 
     def extract(self, image_bytes: bytes) -> MeterExtractionResult:
         image = self._decode_image(image_bytes)
-        notes: list[str] = []
-        if not self.tesseract_available:
-            notes.append("Tesseract OCR nav pieejams PATH, tāpēc M gada un skaitītāja numura nolasīšana būs ierobežota.")
-
-        panel, panel_note = self._find_front_panel(image)
-        if panel_note:
-            notes.append(panel_note)
+        panel, _ = self._find_front_panel(image)
 
         panel_reading, panel_conf, panel_meta = self._extract_meter_reading(panel)
         if panel_reading is not None and panel_conf >= RAW_READING_CONFIDENCE_THRESHOLD:
-            meter_reading, reading_conf, reading_meta = panel_reading, panel_conf, panel_meta
+            meter_reading = panel_reading
         else:
             raw_reading, raw_conf, raw_meta = self._extract_meter_reading(image)
             if panel_conf >= raw_conf:
-                meter_reading, reading_conf, reading_meta = panel_reading, panel_conf, panel_meta
+                meter_reading = panel_reading
             else:
-                meter_reading, reading_conf, reading_meta = raw_reading, raw_conf, raw_meta
-                notes.append("Rādījums paņemts no oriģinālā foto, jo tas tika nolasīts drošāk nekā no paneļa izgriezuma.")
-        if reading_meta.get("note"):
-            notes.append(str(reading_meta["note"]))
-
-        year, serial, text_notes = self._extract_text_fields(panel)
-        if year is None or serial is None:
-            year2, serial2, text_notes2 = self._extract_text_fields(image)
-            year = year if year is not None else year2
-            serial = serial if serial is not None else serial2
-            text_notes.extend(text_notes2)
-        notes.extend(text_notes)
-
-        if meter_reading is None:
-            notes.append("Rādījumu neizdevās droši noteikt. Palīdz tuvāks foto bez atspīduma un ar visu paneli kadrā.")
-        if year is None:
-            notes.append("Izgatavošanas gadu neizdevās droši nolasīt. Parasti tas ir kvadrātā ar M un 2 cipariem.")
-        if serial is None:
-            notes.append("Skaitītāja numuru neizdevās droši nolasīt. Palīdz tuvāks foto no priekšas.")
-
-        conf_parts = [reading_conf]
-        if year is not None:
-            conf_parts.append(0.88)
-        if serial is not None:
-            conf_parts.append(0.88)
-        confidence = round(float(np.mean(conf_parts)), 3) if conf_parts else 0.0
+                meter_reading = raw_reading
 
         return MeterExtractionResult(
             meter_reading=meter_reading,
-            manufacturing_year=year,
-            serial_number=serial,
-            confidence=confidence,
-            notes=self._unique_keep_order(notes),
         )
 
     # ----------------------------
@@ -384,126 +345,6 @@ class FreeMeterReader:
                 if 4 <= int_len <= 6:
                     candidates.append(digits[:int_len])
         return candidates[0] if candidates else None
-
-    # ----------------------------
-    # Year + serial extraction
-    # ----------------------------
-    def _extract_text_fields(self, image: np.ndarray) -> tuple[int | None, str | None, list[str]]:
-        notes: list[str] = []
-        red_box = self._pick_red_box(image)
-        year = self._extract_year(image, red_box)
-        if year is not None:
-            notes.append(f"Izgatavošanas gads secināts no marķējuma M{str(year)[-2:]}." )
-        serial = self._extract_serial(image, red_box)
-        if serial is not None:
-            notes.append("Skaitītāja numurs nolasīts no labās augšējās etiķetes zonas.")
-        return year, serial, notes
-
-    def _extract_year(self, image: np.ndarray, red_box: tuple[int, int, int, int] | None) -> int | None:
-        if not self.tesseract_available:
-            return None
-        h, w = image.shape[:2]
-        zones: list[np.ndarray] = []
-        if red_box is not None:
-            x, y, ww, hh = red_box
-            sx = max(0, int(x - 4.0 * ww))
-            ex = min(w, int(x - 0.8 * ww))
-            sy = max(0, int(y - 1.0 * hh))
-            ey = min(h, int(y + 1.6 * hh))
-            if ex > sx and ey > sy:
-                zones.append(image[sy:ey, sx:ex].copy())
-        zones.append(image[int(0.46 * h): int(0.86 * h), int(0.02 * w): int(0.30 * w)].copy())
-        for zone in zones:
-            for crop in self._find_year_box_candidates(zone)[:4]:
-                for variant in self._ocr_variants(crop, scale=4.0)[:3]:
-                    for psm in (7, 8, 13):
-                        try:
-                            txt = pytesseract.image_to_string(variant, config=f"--psm {psm} -c tessedit_char_whitelist=M0123456789", timeout=1)
-                        except Exception:
-                            txt = ""
-                        clean = re.sub(r"\s+", "", txt.upper())
-                        m = re.search(r"M([0-3]\d)(?!\d)", clean)
-                        if m:
-                            return 2000 + int(m.group(1))
-                        if re.fullmatch(r"[0-3]\d", clean):
-                            return 2000 + int(clean)
-        return None
-
-    def _find_year_box_candidates(self, zone: np.ndarray) -> list[np.ndarray]:
-        gray = cv2.cvtColor(zone, cv2.COLOR_BGR2GRAY)
-        thr = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
-        edges = cv2.Canny(thr, 40, 150)
-        contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-        zh, zw = zone.shape[:2]
-        found: list[tuple[float, np.ndarray]] = []
-        for cnt in contours:
-            x, y, ww, hh = cv2.boundingRect(cnt)
-            area = ww * hh
-            if area < 0.006 * zh * zw or area > 0.20 * zh * zw:
-                continue
-            aspect = ww / max(hh, 1)
-            if not 0.7 <= aspect <= 2.4:
-                continue
-            if x > 0.85 * zw:
-                continue
-            pad_x = max(2, int(0.08 * ww))
-            pad_y = max(2, int(0.10 * hh))
-            crop = zone[max(0, y - pad_y): min(zh, y + hh + pad_y), max(0, x - pad_x): min(zw, x + ww + pad_x)]
-            if crop.size == 0:
-                continue
-            score = -abs(aspect - 1.3) * 3 + area / 1000.0
-            found.append((score, crop.copy()))
-        found.sort(key=lambda item: item[0], reverse=True)
-        return [crop for _, crop in found] or [zone]
-
-    def _extract_serial(self, image: np.ndarray, red_box: tuple[int, int, int, int] | None) -> str | None:
-        if not self.tesseract_available:
-            return None
-        h, w = image.shape[:2]
-        zones: list[np.ndarray] = []
-        if red_box is not None:
-            x, y, ww, hh = red_box
-            for sx, ex, sy, ey in (
-                (int(x + 0.1 * ww), int(x + 5.0 * ww), int(y - 5.0 * hh), int(y - 0.7 * hh)),
-                (int(x + 0.6 * ww), int(x + 4.6 * ww), int(y - 4.4 * hh), int(y - 1.0 * hh)),
-            ):
-                sx = max(0, sx); ex = min(w, ex); sy = max(0, sy); ey = min(h, ey)
-                if ex > sx and ey > sy:
-                    zones.append(image[sy:ey, sx:ex].copy())
-        zones.append(image[int(0.04 * h): int(0.36 * h), int(0.52 * w): int(0.98 * w)].copy())
-        candidates: list[tuple[float, str]] = []
-        for zone in zones:
-            for variant in self._ocr_variants(zone, scale=3.2)[:3]:
-                for psm in (6, 7, 11):
-                    try:
-                        txt = pytesseract.image_to_string(variant, config=f"--psm {psm} -c tessedit_char_whitelist=0123456789", timeout=1)
-                    except Exception:
-                        txt = ""
-                    for chunk in re.findall(r"(?:\d[\s-]?){7,12}", txt):
-                        digits = re.sub(r"\D", "", chunk)
-                        if len(digits) < 7 or len(digits) > 12:
-                            continue
-                        if digits in {"13591998", "13592007", "2006", "2007"}:
-                            continue
-                        variants = {digits}
-                        if len(digits) > 8:
-                            for i in range(0, len(digits) - 8 + 1):
-                                variants.add(digits[i:i+8])
-                        for item in variants:
-                            score = 0.0
-                            if len(item) == 8:
-                                score += 3.0
-                            elif len(item) == 7:
-                                score += 1.8
-                            elif len(item) == 9:
-                                score += 0.9
-                            if item.startswith("0"):
-                                score += 0.4
-                            candidates.append((score, item))
-        if not candidates:
-            return None
-        candidates.sort(key=lambda item: (item[0], -abs(len(item[1]) - 8), item[1]), reverse=True)
-        return candidates[0][1]
 
     def _ocr_variants(self, image: np.ndarray, scale: float = 1.7) -> list[np.ndarray]:
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image.copy()
