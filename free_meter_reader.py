@@ -5,14 +5,27 @@ import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, TypedDict
 
 import cv2
 import numpy as np
 import pytesseract
 from PIL import Image
 
-TRAINING_EXAMPLES: list[dict[str, object]] = [
+
+class TrainingExample(TypedDict):
+    filename: str
+    reading: str
+    int_count: int
+
+
+class ReadingCandidate(TypedDict):
+    int_count: int
+    digits: list[str]
+    avg_score: float
+    score: float
+
+TRAINING_EXAMPLES: list[TrainingExample] = [
     {"filename": "gazesskaititajs_LETA-1.jpg", "reading": "0736.530", "int_count": 4},
     {"filename": "skaititajs_slodze.jpg", "reading": "38880.067", "int_count": 5},
     {"filename": "50e8f28d-4d25-1f96.jpg", "reading": "25972.862", "int_count": 5},
@@ -116,9 +129,16 @@ class FreeMeterReader:
     def _find_red_boxes(self, image: np.ndarray) -> list[tuple[int, int, int, int]]:
         h, w = image.shape[:2]
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-        mask = cv2.inRange(hsv, (0, 45, 45), (15, 255, 255)) | cv2.inRange(hsv, (160, 45, 45), (180, 255, 255))
+        lower_red_1 = np.array((0, 45, 45), dtype=np.uint8)
+        upper_red_1 = np.array((15, 255, 255), dtype=np.uint8)
+        lower_red_2 = np.array((160, 45, 45), dtype=np.uint8)
+        upper_red_2 = np.array((180, 255, 255), dtype=np.uint8)
+        mask = cv2.bitwise_or(
+            cv2.inRange(hsv, lower_red_1, upper_red_1),
+            cv2.inRange(hsv, lower_red_2, upper_red_2),
+        )
         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8), iterations=2)
-        num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(mask, 8)
+        num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
         found: list[tuple[float, tuple[int, int, int, int]]] = []
         for i in range(1, num_labels):
             x, y, ww, hh, area = stats[i]
@@ -178,7 +198,7 @@ class FreeMeterReader:
         local_red_x = red_box[0] - crop_box[0]
         red_w = red_box[2]
 
-        best_candidate: dict[str, object] | None = None
+        best_candidate: ReadingCandidate | None = None
         for int_count in INT_COUNTS:
             for start_offset in START_OFFSETS:
                 cells = self._extract_cells(band, local_red_x, red_w, int_count=int_count, start_offset=start_offset)
@@ -205,8 +225,13 @@ class FreeMeterReader:
                     score += 0.015
                 if predicted_digits and predicted_digits[0] in {"0", "1", "2", "3"}:
                     score += 0.01
-                candidate = {"int_count": int_count, "digits": predicted_digits, "avg_score": avg_score, "score": score}
-                if best_candidate is None or float(candidate["score"]) > float(best_candidate["score"]):
+                candidate: ReadingCandidate = {
+                    "int_count": int_count,
+                    "digits": predicted_digits,
+                    "avg_score": avg_score,
+                    "score": score,
+                }
+                if best_candidate is None or candidate["score"] > best_candidate["score"]:
                     best_candidate = candidate
 
         if best_candidate is None:
@@ -288,7 +313,7 @@ class FreeMeterReader:
         inv[h - max(1, int(h * 0.05)) :, :] = 0
         inv[:, : max(1, int(w * 0.10))] = 0
         inv[:, w - max(1, int(w * 0.10)) :] = 0
-        num_labels, labels, stats, cents = cv2.connectedComponentsWithStats(inv, 8)
+        num_labels, labels, stats, cents = cv2.connectedComponentsWithStats(inv, connectivity=8)
         keep_ids: list[int] = []
         for i in range(1, num_labels):
             x, y, ww, hh, area = stats[i]
@@ -488,7 +513,9 @@ class FreeMeterReader:
             gray = cv2.resize(gray, None, fx=shrink, fy=shrink, interpolation=cv2.INTER_AREA)
         gray = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
         gray = cv2.GaussianBlur(gray, (3, 3), 0)
-        gray = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX)
+        normalized_gray = np.empty_like(gray)
+        cv2.normalize(gray, normalized_gray, 0, 255, cv2.NORM_MINMAX)
+        gray = normalized_gray
         otsu = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
         adaptive = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 11)
         return [gray, otsu, 255 - otsu, adaptive]
