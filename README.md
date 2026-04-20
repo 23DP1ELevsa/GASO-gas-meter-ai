@@ -19,7 +19,7 @@
 PowerShell logā pārej uz projekta mapi:
 
 ```powershell
-cd "C:\Users\eduar\OneDrive\Рабочий стол\GASO\GASO-gas-meter-ai"
+cd GASO-gas-meter-ai
 ```
 
 ### 2. Izveido virtuālo vidi
