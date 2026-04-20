@@ -1,4 +1,4 @@
-# Bezmaksas gāzes skaitītāja nolasītājs
+# Gāzes skaitītāja nolasītājs
 
 Šī ir lokāla Flask lietotne, kas no foto mēģina nolasīt gāzes skaitītāja rādījumu tikai līdz komatam.
 
